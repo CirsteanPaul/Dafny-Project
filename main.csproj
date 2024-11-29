@@ -12,6 +12,10 @@
 
   
   <ItemGroup>
-      <Compile Include="/Users/paulcirstean/Library/Mobile Documents/com~apple~CloudDocs/facultate/An3/An3 nou/VDPD/project/impl.cs" />      
+      <Compile Include="/Users/paulcirstean/Library/Mobile Documents/com~apple~CloudDocs/facultate/An3/An3 nou/VDPD/project/main.cs" />
+
+      <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
+      <PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
+      
   </ItemGroup>
 </Project>

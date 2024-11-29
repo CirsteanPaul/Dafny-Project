@@ -1,3 +1,10 @@
 .idea
 bin
 obj
+ref
+main.deps.json
+main.dll
+main.pdb
+main.runtimeconfig.json
+main
+main.cs
