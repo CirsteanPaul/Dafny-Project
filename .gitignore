@@ -8,3 +8,8 @@ main.pdb
 main.runtimeconfig.json
 main
 main.cs
+impl.cs
+search.cs
+search.deps.json
+search.dll
+search.pdb

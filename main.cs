@@ -8,52 +8,114 @@
 using System;
 using System.Numerics;
 using System.Collections;
-[assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.8.1.0
-// Command-line arguments: run main.dfy
+[assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.9.1.0
+// Command-line arguments: run --no-verify /Users/paulcirstean/Library/Mobile Documents/com~apple~CloudDocs/facultate/An3/An3 nou/VDPD/project/main.dfy
 // main.dfy
 
 method Main(_noArgsParameter: seq<seq<char>>)
 {
-  var txt := ""ABAAABCD"";
-  var pat := ""ABC"";
-  search(txt, pat);
+  var text := ""AABAACAADAABAAABAA"";
+  var pattern := ""AAB"";
+  print ""Starting Boyer-Moore Pattern Matching\n"";
+  print ""------------------------------------\n"";
+  var _ /* _v0 */ := Search(text, pattern);
 }
 
-method search(txt: seq<char>, pat: seq<char>)
-  requires |pat| > 2
-  requires forall i: int {:trigger pat[i]} :: 0 <= i < |pat| ==> pat[i] as int <= 255
-  decreases txt, pat
+method BadCharHeuristic(pattern: seq<char>, badChar: array<int>)
+  requires badChar.Length == 256
+  requires forall i: int {:trigger pattern[i]} :: 0 <= i < |pattern| ==> pattern[i] as int <= 255
+  modifies badChar
+  ensures forall i: int {:trigger pattern[i]} :: 0 <= i < |pattern| ==> badChar[pattern[i] as int] != -1
+  ensures forall i: int {:trigger badChar[i]} :: 0 <= i < badChar.Length ==> badChar[i] < |pattern|
+  decreases pattern, badChar
 {
-  var badchar := new int[256];
-  badCharHeuristic(pat, |pat|, badchar);
+  var NO_OF_CHARS := 256;
+  for i: int := 0 to badChar.Length
+    invariant forall ii: int {:trigger badChar[ii]} :: 0 <= ii < i ==> badChar[ii] == -1
+  {
+    badChar[i] := -1;
+  }
+  for i: int := 0 to |pattern|
+    invariant forall ii: int {:trigger pattern[ii]} :: 0 <= ii < i ==> badChar[pattern[ii] as int] != -1
+    invariant forall ii: int {:trigger badChar[ii]} :: 0 <= ii < badChar.Length ==> badChar[ii] < |pattern|
+  {
+    badChar[pattern[i] as int] := i;
+  }
 }
 
-method badCharHeuristic(pat: seq<char>, size: int, badchar: array<int>)
-  requires size == |pat|
-  requires size > 2
-  requires badchar.Length == 256
-  requires forall i: int {:trigger pat[i]} :: 0 <= i < size ==> pat[i] as int <= 255
-  modifies badchar
-  decreases pat, size, badchar
+method Search(text: seq<char>, pattern: seq<char>) returns (foundIndices: seq<nat>)
+  requires forall i: int {:trigger pattern[i]} :: 0 <= i < |pattern| ==> pattern[i] as int <= 255
+  requires forall i: int {:trigger text[i]} :: 0 <= i < |text| ==> text[i] as int <= 255
+  requires |pattern| <= |text|
+  requires |pattern| >= 1
+  ensures forall ii: int {:trigger foundIndices[ii]} :: (0 <= ii < |foundIndices| ==> foundIndices[ii] <= |text| - |pattern|) && (0 <= ii < |foundIndices| ==> foundIndices[ii] >= 0)
+  ensures forall ii: int {:trigger foundIndices[ii]} :: 0 <= ii < |foundIndices| ==> text[foundIndices[ii] .. foundIndices[ii] + |pattern|] == pattern
+  ensures forall ii: int {:trigger ii in foundIndices} :: 0 <= ii < |text| - |pattern| ==> text[ii .. ii + |pattern|] != pattern ==> ii !in foundIndices
+  decreases text, pattern
 {
-  for i: int := 0 to badchar.Length {
-    badchar[i] := -1;
+  var NO_OF_CHARS := 256;
+  foundIndices := [];
+  var totalShifts := 0;
+  var badChar := new int[NO_OF_CHARS];
+  BadCharHeuristic(pattern, badChar);
+  print ""Text: "";
+  print text;
+  print ""\n"";
+  print ""Pattern: "";
+  print pattern;
+  print ""\n"";
+  print ""Index | Substring  | Match      | Shift\n"";
+  print ""----------------------------------------\n"";
+  var s := 0;
+  while s <= |text| - |pattern|
+    invariant forall i: int {:trigger badChar[i]} :: 0 <= i < badChar.Length ==> badChar[i] < |pattern|
+    invariant forall ii: int {:trigger foundIndices[ii]} :: (0 <= ii < |foundIndices| ==> foundIndices[ii] <= |text| - |pattern|) && (0 <= ii < |foundIndices| ==> foundIndices[ii] >= 0)
+    invariant forall ii: int {:trigger foundIndices[ii]} :: 0 <= ii < |foundIndices| ==> text[foundIndices[ii] .. foundIndices[ii] + |pattern|] == pattern
+    invariant forall ii: int {:trigger ii in foundIndices} :: 0 <= ii < s && s <= |text| - |pattern| ==> text[ii .. ii + |pattern|] != pattern ==> ii !in foundIndices
+    decreases |text| - |pattern| - s
+  {
+    var j := |pattern| - 1;
+    var substring := text[s .. s + |pattern|];
+    print s, ""      | \"""", substring, ""\"""";
+    while j >= 0 && pattern[j] == text[s + j]
+      invariant j + 1 >= 0 && |pattern| - 1 >= 0
+      invariant j != |pattern| - 1 ==> pattern[j + 1 .. |pattern|] == text[s + j + 1 .. s + |pattern|]
+      invariant j == -1 ==> text[s .. s + |pattern|] == pattern
+      decreases j
+    {
+      j := j - 1;
+    }
+    if j < 0 {
+      print "" | Found      | 0\n"";
+      foundIndices := foundIndices + [s];
+      if s + |pattern| < |text| {
+        s := s + |pattern| - badChar[text[s + |pattern|] as int];
+      } else {
+        s := s + 1;
+      }
+    } else {
+      var aux := max(1, j - badChar[text[s + j] as int]);
+      print "" | Not Found  | "", aux, ""\n"";
+      s := s + aux;
+    }
+    totalShifts := totalShifts + 1;
   }
-  for i: int := 0 to size {
-    badchar[pat[i] as int] := i;
-  }
-  for i: int := 0 to badchar.Length {
-    print badchar[i], "" "";
-  }
+  print ""----------------------------------------\n"";
+  print ""Summary:\n"";
+  print ""- Pattern found at indices: "", foundIndices, ""\n"";
+  print ""- Total shifts: "", totalShifts, ""\n"";
+  print ""Pattern matching completed.\n"";
 }
 
-function max(a: int, b: int): int
+method max(a: int, b: int) returns (maxVal: int)
+  ensures maxVal >= a && maxVal >= b
   decreases a, b
 {
-  if a > b then
-    a
-  else
-    b
+  if a > b {
+    maxVal := a;
+  } else {
+    maxVal := b;
+  }
 }
 ")]
 
@@ -606,7 +668,9 @@ namespace Dafny {
       return s + "}";
     }
     public static bool IsProperSubsetOf(IMultiSet<T> th, IMultiSet<T> other) {
-      return th.Count < other.Count && IsSubsetOf(th, other);
+      // Be sure to use ElementCount to avoid casting into 32 bits
+      // integers that could lead to overflows (see https://github.com/dafny-lang/dafny/issues/5554)
+      return th.ElementCount < other.ElementCount && IsSubsetOf(th, other);
     }
     public static bool IsSubsetOf(IMultiSet<T> th, IMultiSet<T> other) {
       var a = FromIMultiSet(th);
@@ -2576,6 +2640,7 @@ internal static class FuncExtensions {
     return (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16) => ResConv(F(ArgConv1(arg1), ArgConv2(arg2), ArgConv3(arg3), ArgConv4(arg4), ArgConv5(arg5), ArgConv6(arg6), ArgConv7(arg7), ArgConv8(arg8), ArgConv9(arg9), ArgConv10(arg10), ArgConv11(arg11), ArgConv12(arg12), ArgConv13(arg13), ArgConv14(arg14), ArgConv15(arg15), ArgConv16(arg16)));
   }
 }
+// end of class FuncExtensions
 #endif
 namespace _System {
 
@@ -5722,52 +5787,112 @@ internal static class FuncExtensions {
   public static Func<UResult> DowncastClone<TResult, UResult>(this Func<TResult> F, Func<TResult, UResult> ResConv) {
     return () => ResConv(F());
   }
-  public static Func<U1, U2, UResult> DowncastClone<T1, T2, TResult, U1, U2, UResult>(this Func<T1, T2, TResult> F, Func<U1, T1> ArgConv1, Func<U2, T2> ArgConv2, Func<TResult, UResult> ResConv) {
-    return (arg1, arg2) => ResConv(F(ArgConv1(arg1), ArgConv2(arg2)));
-  }
 }
+// end of class FuncExtensions
 namespace _module {
 
   public partial class __default {
     public static void _Main(Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> __noArgsParameter)
     {
-      Dafny.ISequence<Dafny.Rune> _0_txt;
-      _0_txt = Dafny.Sequence<Dafny.Rune>.UnicodeFromString("ABAAABCD");
-      Dafny.ISequence<Dafny.Rune> _1_pat;
-      _1_pat = Dafny.Sequence<Dafny.Rune>.UnicodeFromString("ABC");
-      __default.search(_0_txt, _1_pat);
+      Dafny.ISequence<Dafny.Rune> _0_text;
+      _0_text = Dafny.Sequence<Dafny.Rune>.UnicodeFromString("AABAACAADAABAAABAA");
+      Dafny.ISequence<Dafny.Rune> _1_pattern;
+      _1_pattern = Dafny.Sequence<Dafny.Rune>.UnicodeFromString("AAB");
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Starting Boyer-Moore Pattern Matching\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("------------------------------------\n")).ToVerbatimString(false));
+      Dafny.ISequence<BigInteger> _2___v0;
+      Dafny.ISequence<BigInteger> _out0;
+      _out0 = __default.Search(_0_text, _1_pattern);
+      _2___v0 = _out0;
     }
-    public static void search(Dafny.ISequence<Dafny.Rune> txt, Dafny.ISequence<Dafny.Rune> pat)
+    public static void BadCharHeuristic(Dafny.ISequence<Dafny.Rune> pattern, BigInteger[] badChar)
     {
-      BigInteger[] _0_badchar;
-      BigInteger[] _nw0 = new BigInteger[Dafny.Helpers.ToIntChecked(new BigInteger(256), "array size exceeds memory limit")];
-      _0_badchar = _nw0;
-      __default.badCharHeuristic(pat, new BigInteger((pat).Count), _0_badchar);
+      BigInteger _0_NO__OF__CHARS;
+      _0_NO__OF__CHARS = new BigInteger(256);
+      BigInteger _hi0 = new BigInteger((badChar).Length);
+      for (BigInteger _1_i = BigInteger.Zero; _1_i < _hi0; _1_i++) {
+        (badChar)[(int)((_1_i))] = new BigInteger(-1);
+      }
+      BigInteger _hi1 = new BigInteger((pattern).Count);
+      for (BigInteger _2_i = BigInteger.Zero; _2_i < _hi1; _2_i++) {
+        BigInteger _index0 = new BigInteger(((pattern).Select(_2_i)).Value);
+        (badChar)[(int)(_index0)] = _2_i;
+      }
     }
-    public static void badCharHeuristic(Dafny.ISequence<Dafny.Rune> pat, BigInteger size, BigInteger[] badchar)
+    public static Dafny.ISequence<BigInteger> Search(Dafny.ISequence<Dafny.Rune> text, Dafny.ISequence<Dafny.Rune> pattern)
     {
-      BigInteger _hi0 = new BigInteger((badchar).Length);
-      for (BigInteger _0_i = BigInteger.Zero; _0_i < _hi0; _0_i++) {
-        (badchar)[(int)((_0_i))] = new BigInteger(-1);
+      Dafny.ISequence<BigInteger> foundIndices = Dafny.Sequence<BigInteger>.Empty;
+      BigInteger _0_NO__OF__CHARS;
+      _0_NO__OF__CHARS = new BigInteger(256);
+      foundIndices = Dafny.Sequence<BigInteger>.FromElements();
+      BigInteger _1_totalShifts;
+      _1_totalShifts = BigInteger.Zero;
+      BigInteger[] _2_badChar;
+      BigInteger[] _nw0 = new BigInteger[Dafny.Helpers.ToIntChecked(_0_NO__OF__CHARS, "array size exceeds memory limit")];
+      _2_badChar = _nw0;
+      __default.BadCharHeuristic(pattern, _2_badChar);
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Text: ")).ToVerbatimString(false));
+      Dafny.Helpers.Print((text).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Pattern: ")).ToVerbatimString(false));
+      Dafny.Helpers.Print((pattern).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Index | Substring  | Match      | Shift\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("----------------------------------------\n")).ToVerbatimString(false));
+      BigInteger _3_s;
+      _3_s = BigInteger.Zero;
+      while ((_3_s) <= ((new BigInteger((text).Count)) - (new BigInteger((pattern).Count)))) {
+        BigInteger _4_j;
+        _4_j = (new BigInteger((pattern).Count)) - (BigInteger.One);
+        Dafny.ISequence<Dafny.Rune> _5_substring;
+        _5_substring = (text).Subsequence(_3_s, (_3_s) + (new BigInteger((pattern).Count)));
+        Dafny.Helpers.Print((_3_s));
+        Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("      | \"")).ToVerbatimString(false));
+        Dafny.Helpers.Print((_5_substring).ToVerbatimString(false));
+        Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\"")).ToVerbatimString(false));
+        while (((_4_j).Sign != -1) && (((pattern).Select(_4_j)) == ((text).Select((_3_s) + (_4_j))))) {
+          _4_j = (_4_j) - (BigInteger.One);
+        }
+        if ((_4_j).Sign == -1) {
+          Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString(" | Found      | 0\n")).ToVerbatimString(false));
+          foundIndices = Dafny.Sequence<BigInteger>.Concat(foundIndices, Dafny.Sequence<BigInteger>.FromElements(_3_s));
+          if (((_3_s) + (new BigInteger((pattern).Count))) < (new BigInteger((text).Count))) {
+            _3_s = ((_3_s) + (new BigInteger((pattern).Count))) - ((_2_badChar)[(int)(new BigInteger(((text).Select((_3_s) + (new BigInteger((pattern).Count)))).Value))]);
+          } else {
+            _3_s = (_3_s) + (BigInteger.One);
+          }
+        } else {
+          BigInteger _6_aux;
+          BigInteger _out0;
+          _out0 = __default.max(BigInteger.One, (_4_j) - ((_2_badChar)[(int)(new BigInteger(((text).Select((_3_s) + (_4_j))).Value))]));
+          _6_aux = _out0;
+          Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString(" | Not Found  | ")).ToVerbatimString(false));
+          Dafny.Helpers.Print((_6_aux));
+          Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\n")).ToVerbatimString(false));
+          _3_s = (_3_s) + (_6_aux);
+        }
+        _1_totalShifts = (_1_totalShifts) + (BigInteger.One);
       }
-      BigInteger _hi1 = size;
-      for (BigInteger _1_i = BigInteger.Zero; _1_i < _hi1; _1_i++) {
-        BigInteger _index0 = new BigInteger(((pat).Select(_1_i)).Value);
-        (badchar)[(int)(_index0)] = _1_i;
-      }
-      BigInteger _hi2 = new BigInteger((badchar).Length);
-      for (BigInteger _2_i = BigInteger.Zero; _2_i < _hi2; _2_i++) {
-        Dafny.Helpers.Print(((badchar)[(int)(_2_i)]));
-        Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString(" ")).ToVerbatimString(false));
-      }
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("----------------------------------------\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Summary:\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("- Pattern found at indices: ")).ToVerbatimString(false));
+      Dafny.Helpers.Print((foundIndices));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("- Total shifts: ")).ToVerbatimString(false));
+      Dafny.Helpers.Print((_1_totalShifts));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("\n")).ToVerbatimString(false));
+      Dafny.Helpers.Print((Dafny.Sequence<Dafny.Rune>.UnicodeFromString("Pattern matching completed.\n")).ToVerbatimString(false));
+      return foundIndices;
     }
     public static BigInteger max(BigInteger a, BigInteger b)
     {
+      BigInteger maxVal = BigInteger.Zero;
       if ((a) > (b)) {
-        return a;
+        maxVal = a;
       } else {
-        return b;
+        maxVal = b;
       }
+      return maxVal;
     }
   }
 } // end of namespace _module
